@@ -69,7 +69,7 @@ MODULE globalData
   USE var_lookup, ONLY: nVarsMC      ! number of variables in data structure (restart vars for muskingum-cunge routing)
   USE var_lookup, ONLY: nVarsDW      ! number of variables in data structure (restart vars for diffusive wave routing)
   USE var_lookup, ONLY: nVarsTracer  ! number of variables in data structure (restart vars for tracer)
-
+  USE openWQ,     ONLY : CLASSWQ_openwq! OpenWQ interface
   implicit none
 
   save
@@ -130,7 +130,7 @@ MODULE globalData
   ! ---------- Misc. data -------------------------------------------------------------------------
   character(len=strLen),           public :: runMode='standalone'        ! run options: standalone or cesm-coupling
   character(len=12),               public :: hfile_dayStamp='period-start' ! day stamp in history file for daily file. period-start or period-end
-  integer(i4b),                    public :: maxtdh=0                    ! maximum unit-hydrograph future time steps
+  integer(i4b),                    public :: maxtdh                      ! maximum unit-hydrograph future time steps
   type(cMolecule),                 public :: nMolecule                   ! number of computational molecule (used for KW, MC, DW)
   character(FileStrLen),           public :: hfileout=charMissing        ! history output file name
   character(FileStrLen),           public :: hfileout_gage=charMissing   ! gage-only history output file name
@@ -284,5 +284,8 @@ MODULE globalData
 
   ! -- reach to reach connection
   type(commLink),     allocatable, public :: commRch(:)             ! reach-reach connections for reach flux transfer
+
+! openwq variable
+  type(CLASSWQ_openwq),save,public            :: openwq_obj
 
 END MODULE globalData

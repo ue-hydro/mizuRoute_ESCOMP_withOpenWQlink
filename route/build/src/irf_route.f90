@@ -8,12 +8,12 @@ USE dataTypes,         ONLY: RCHPRP            ! reach/lake property parameter
 USE dataTypes,         ONLY: irfRCH            ! irf specific state data structure
 USE public_var,        ONLY: iulog             ! i/o logical unit number
 USE public_var,        ONLY: realMissing       ! missing value for real number
+USE public_var,        ONLY: integerMissing    ! missing value for integer number
 USE public_var,        ONLY: desireId          ! ID or reach where detailed reach state is print in log
 USE public_var,        ONLY: dt                ! simulation time step [sec]
 USE public_var,        ONLY: qmodOption        ! qmod option (use 1==direct insertion)
 USE public_var,        ONLY: hw_drain_point    ! headwater catchment pour point (top_reach==1 or bottom_reach==2)
 USE public_var,        ONLY: min_length_route  ! minimum reach length for routing to be performed.
-USE public_var,        ONLY: negVolTol         ! negative channel water volume tolerance [m3]
 USE globalData,        ONLY: idxIRF            ! routing method index for IRF method
 USE water_balance,     ONLY: comp_reach_wb     ! compute water balance error
 USE base_route,        ONLY: base_route_rch    ! base (abstract) reach routing method class
@@ -74,7 +74,7 @@ CONTAINS
  character(len=strLen)                    :: cmessage       ! error message from subroutine
 
  ierr=0; message='irf_rch/'
-
+! print*, message
  verbose = .false.
  if(NETOPO_in(segIndex)%REACHID == desireId) verbose = .true.
 
@@ -142,7 +142,9 @@ CONTAINS
   endif
 
   ! perform UH convolution
-  call conv_upsbas_qr(RPARAM_in(segIndex),       &    ! input: parameter at segIndex reach
+  call conv_upsbas_qr(segIndex, &
+                      RPARAM_in(segIndex),       &    ! input: parameter at segIndex reach
+                      NETOPO_in, &
                       NETOPO_in(segIndex)%UH,    &    ! input: reach unit hydrograph
                       q_upstream_mod,            &    ! input: total discharge from the upstreams
                       Qlat,                      &    ! input: lateral flow [m3/s]
@@ -180,9 +182,15 @@ CONTAINS
     write(*,'(a,1x,F15.7)')     ' RCHFLX_out%REACH_Q =', RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_Q
   endif
 
-  if (RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_VOL(1) < negVolTol) then
+  if (RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_VOL(1) < 0) then
     write(iulog,'(A,1X,G12.5,1X,A,1X,I9)') ' ---- NEGATIVE VOLUME [m3]= ', RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_VOL(1), &
           'at ', NETOPO_in(segIndex)%REACHID
+!    RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_VOL(1) = 0._dp
+  end if
+  if (RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_Q < 0) then
+    write(iulog,'(A,1X,G12.5,1X,A,1X,I9)') ' ---- NEGATIVE FLOW [m3/s] = ', RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_Q, &
+           'at ', NETOPO_in(segIndex)%REACHID
+!    RCHFLX_out(segIndex)%ROUTE(idxIRF)%REACH_Q = 0._dp
   end if
 
   if (qmodOption==1) then
@@ -193,7 +201,7 @@ CONTAINS
                           RCHFLX_out,     & ! inout: reach fluxes datq structure
                           ierr, cmessage)   ! output: error control
     if(ierr/=0)then
-      write(message,'(A,1X,I12,1X,A)') trim(message)//'/segment=', NETOPO_in(segIndex)%REACHID, '/'//trim(cmessage); return
+      write(message,'(A,X,I12,X,A)') trim(message)//'/segment=', NETOPO_in(segIndex)%REACHID, '/'//trim(cmessage); return
     endif
   end if
 
@@ -207,7 +215,9 @@ CONTAINS
  ! *********************************************************************
  ! subroutine: Compute delayed runoff from the upstream segments
  ! *********************************************************************
- SUBROUTINE conv_upsbas_qr(rch_param,  &    ! input: river parameter data structure
+ SUBROUTINE conv_upsbas_qr(segIndex, &
+                           rch_param,  &    ! input: river parameter data structure
+                           netopo_in, &
                            reach_uh,   &    ! input: reach unit hydrograph
                            q_upstream, &    ! input:
                            Qlat,       &    ! input:
@@ -216,10 +226,14 @@ CONTAINS
  ! ----------------------------------------------------------------------------------------
  ! Details: Convolute runoff volume of upstream at one reach at one time step
  ! ----------------------------------------------------------------------------------------
+USE mizuroute_openwq,   only:openwq_run_space_step
 
  implicit none
  ! Argument variables
+ integer(i4b),intent(in) :: segIndex
  type(RCHPRP), intent(in)               :: rch_param    ! River reach parameter
+  type(RCHTOPO), intent(in),    allocatable :: NETOPO_in(:)      ! River Network topology
+
  real(dp),     intent(in)               :: reach_uh(:)  ! reach unit hydrograph
  real(dp),     intent(in)               :: q_upstream   ! total discharge at top of the reach being processed
  real(dp),     intent(in)               :: Qlat         ! lataral flow
@@ -242,7 +256,8 @@ CONTAINS
 
  ! compute volume in reach
  ! For very low flow condition, outflow - inflow > current storage, so limit outflow and adjust rflux%QFUTURE_IRF(1)
- rflux%QFUTURE_IRF(1) = min((max(0._dp, rflux%ROUTE(idxIRF)%REACH_VOL(1))/dt + q_upstream)*0.999, rflux%QFUTURE_IRF(1))
+! rflux%QFUTURE_IRF(1) = min(0.999*(rflux%ROUTE(idxIRF)%REACH_VOL(1)/dt + q_upstream), rflux%QFUTURE_IRF(1))
+ rflux%QFUTURE_IRF(1) = min(rflux%ROUTE(idxIRF)%REACH_VOL(0)/dt + q_upstream*0.999, rflux%QFUTURE_IRF(1))
  rflux%ROUTE(idxIRF)%REACH_VOL(1) = rflux%ROUTE(idxIRF)%REACH_VOL(1) - (rflux%QFUTURE_IRF(1) - q_upstream)*dt
 
  ! Add local routed flow at the bottom of reach
@@ -252,6 +267,13 @@ CONTAINS
  rflux%QFUTURE_IRF=eoshift(rflux%QFUTURE_IRF,shift=1)
 
  rflux%QFUTURE_IRF(nTDH) = 0._dp
+
+ ! openwq_space
+ call openwq_run_space_step(segIndex, & ! index_openwq
+ netopo_in, &
+  rflux%ROUTE(idxIRF)%REACH_VOL(0), & ! Volume (source)
+  q_upstream, & ! flow in
+  rflux%ROUTE(idxIRF)%REACH_Q*dt) ! flow out
  else ! length < min_length_route: length is short enough to just pass upstream to downstream
    rflux%QFUTURE_IRF(:) = 0._dp
    rflux%QFUTURE_IRF(1) = q_upstream
