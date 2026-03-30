@@ -46,6 +46,7 @@ buildlibc
 
 # temp src directory
 /route/build/src/tmp
+/route/build/openwq/openwq
 
 # CMAKE files created
 CMakeFiles
