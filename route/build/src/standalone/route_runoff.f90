@@ -33,6 +33,14 @@ USE get_runoff,          ONLY: get_hru_runoff   !
 USE write_simoutput_pio, ONLY: main_new_file    !
 USE write_simoutput_pio, ONLY: output           !
 USE write_restart_pio,   ONLY: main_restart     ! write netcdf state output file
+! OpenWQ coupling 
+USE globalData,         ONLY : openwq_obj
+USE mizuroute_openwq,   ONLY : openwq_init
+USE mizuroute_openwq,   ONLY : openwq_run_time_start
+USE mizuroute_openwq,   ONLY : openwq_run_time_end
+USE mizuroute_openwq, ONLY : openwq_handle_run_space_step
+USE mpi_utils,          ONLY : shr_mpi_barrier
+USE, intrinsic :: iso_c_binding
 
 implicit none
 
@@ -74,6 +82,12 @@ if(ierr/=0) call handle_err(ierr, cmessage)
 call init_data(pid, nNodes, mpicom_route, ierr, cmessage)
 if(ierr/=0) call handle_err(ierr, cmessage)
 
+! *****
+! *** OPENWQ - initiate vars
+call openwq_init(ierr, cmessage)
+if(ierr/=0) call handle_err(ierr, cmessage)
+! ************************
+
 ! ***********************************
 ! start of time-stepping simulation
 ! ***********************************
@@ -89,6 +103,9 @@ do while (.not.finished)
     call t_stopf ('input')
   endif
 
+  ! *** OPENWQ: call run_time_start function
+  call openwq_run_time_start(openwq_obj)
+
   call t_startf ('route-total')
   call mpi_route(pid, nNodes, mpicom_route, ierr, cmessage)
   if(ierr/=0) call handle_err(ierr, cmessage)
@@ -98,6 +115,15 @@ do while (.not.finished)
   call output(ierr, cmessage)
   if(ierr/=0) call handle_err(ierr, cmessage)
   call t_stopf ('output')
+
+  call shr_mpi_barrier(mpicom_route)
+  if (pid == 0) call openwq_handle_run_space_step
+  call shr_mpi_barrier(mpicom_route)
+  
+  ! *** OPENWQ: call run_time_end function
+  if (pid==0) then
+    call openwq_run_time_end(openwq_obj)
+  end if
 
   call main_restart(ierr, cmessage)
   if(ierr/=0) call handle_err(ierr, cmessage)

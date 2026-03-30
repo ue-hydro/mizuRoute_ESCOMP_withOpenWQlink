@@ -10,6 +10,7 @@ USE public_var,    ONLY: desireId        ! ID or reach where detailed reach stat
 USE public_var,    ONLY: pi              ! parameter: pi value of 3.14159265359_dp
 USE globalData,    ONLY: isColdStart     ! parameter: restart flag
 USE water_balance, ONLY: comp_reach_wb   ! routine: compute water balance error
+USE ascii_utils,   ONLY: lower           ! routine: convert string to lower case
 
 implicit none
 integer(i4b),parameter :: endorheic=0
@@ -43,6 +44,7 @@ CONTAINS
     USE public_var, ONLY: days_per_yr         ! days per a year = 365
     USE public_var, ONLY: months_per_yr       ! months per a year = 12
     USE public_var, ONLY: calendar            ! calendar name
+    USE mizuroute_openwq,   only:openwq_run_space_step
 
     implicit none
     ! Argument variables:
@@ -59,12 +61,13 @@ CONTAINS
     integer(i4b)                             :: nUps           ! number of upstream segment
     integer(i4b)                             :: iUps           ! upstream reach index
     integer(i4b)                             :: iRch_ups       ! index of upstream reach in NETOPO
+    integer(i4b)                             :: ntdh           ! number of time steps in IRF
     character(len=strLen)                    :: cmessage       ! error message from subroutine
     ! local variables for H06 routine
     real(dp)                                 :: c                   ! storage to yearly activity ratio
     real(dp)                                 :: I_yearly, D_yearly  ! mean annual inflow and demand
     real(dp), dimension(12)                  :: I_months, D_months  ! mean monthly inflow and demand
-    integer(i4b), dimension(2)               :: array_size          ! get the size of array_size
+    integer(i4b), dimension(2)               :: array_size(2)       ! get the size of array_size
     integer(i4b)                             :: start_month=0       ! start month of the operational year
     integer(i4b)                             :: i                   ! index
     integer(i4b)                             :: past_length_I       ! pas length for inflow based on length in year and floor
@@ -465,6 +468,14 @@ CONTAINS
 !        ierr = 1; message=trim(message)//trim(cmessage);
 !      endif
 !    endif
+
+    ! openwq space
+   call openwq_run_space_step(segIndex,   & ! index_openwq
+   NETOPO_in, &
+   RCHFLX_out(segIndex)%ROUTE(idxRoute)%REACH_VOL(1),    & ! Volume (source)
+   q_upstream*dt,                     & ! flow in
+   RCHFLX_out(segIndex)%ROUTE(idxRoute)%REACH_Q*dt)      ! flow out
+
 
     call comp_reach_wb(NETOPO_in(segIndex)%REACHID, idxRoute, q_upstream, RCHFLX_out(segIndex)%BASIN_QR(1), RCHFLX_out(segIndex), &
                        verbose, lakeFlag=.true.,tolerance=lakeWBtol)
