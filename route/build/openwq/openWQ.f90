@@ -51,7 +51,7 @@ module openwq
       simtime,                                &
       nRch_2openwq,                           &
       REACH_VOL_0)
-    
+
       implicit none
       class(CLASSWQ_openwq)      :: this
       integer(i4b), intent(in)   :: nRch_2openwq
@@ -63,7 +63,7 @@ module openwq
          simtime,                                        &
          nRch_2openwq,                                   &
          REACH_VOL_0)
-   
+
    end function
 
    integer function openwq_run_space(  &

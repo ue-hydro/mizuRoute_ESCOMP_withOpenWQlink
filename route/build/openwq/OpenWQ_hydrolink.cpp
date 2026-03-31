@@ -66,7 +66,11 @@ int CLASSWQ_openwq::decl(
 
         // Dependencies
         // to expand BGC modelling options
-        // OpenWQ_hostModelconfig_ref->HydroDepend.push_back(OpenWQ_hostModelconfig::hydroTuple(0,"SM",        num_HRU,nYdirec_2openwq, nSnow_2openwq + nSoil_2openwq));
+        // These variables can be used in BGC kinetic expressions (e.g., temperature-dependent rates)
+        // IMPORTANT: "T" is in degrees Celsius [°C] (converted from Kelvin before passing to OpenWQ)
+        // so that BGC templates can use expressions like 1.08^(T - 20) directly
+        OpenWQ_hostModelconfig_ref->add_HydroDepend(0, "T",          nRch, 1, 1);  // Water temperature [°C]
+        OpenWQ_hostModelconfig_ref->add_HydroDepend(1, "SWrad_Wm2",  nRch, 1, 1);  // Incoming shortwave radiation [W/m2]
 
         // Mapping mizuroute element ids to OpenWQ elements
         // cellid_to_wq for mizuroute-to-openwq output mapping
@@ -125,17 +129,26 @@ int CLASSWQ_openwq::openwq_run_time_start(
     // printf("99\n");
     time_t simtime = OpenWQ_units_ref->convertTime_ints2time_t(
         *OpenWQ_wqconfig_ref,
-        simtime_mizuroute[0], 
-        simtime_mizuroute[1], 
-        simtime_mizuroute[2], 
-        simtime_mizuroute[3], 
+        simtime_mizuroute[0],
+        simtime_mizuroute[1],
+        simtime_mizuroute[2],
+        simtime_mizuroute[3],
         simtime_mizuroute[4],
         simtime_mizuroute[5]);
-    
-    // update Vars that rely on Snow
+
+    // Update water volumes and dependency variables for each reach
     for (int x = 0; x < nRch_2openwq; x++) {
+        // Water volume
         OpenWQ_hostModelconfig_ref->set_waterVol_hydromodel_at(rivernetwork_nRch_openwq,x,0,0,REACH_VOL_0[x]);
-        // (*OpenWQ_hostModelconfig_ref->waterVol_hydromodel)[rivernetwork_nRch_openwq](x,0,0) = REACH_VOL_0[x];   // snow
+
+        // Dependency variables for BGC kinetic expressions
+        // NOTE: Using default values because mizuRoute does not currently pass
+        // meteorological forcing data to OpenWQ. When real forcing data becomes
+        // available, update the function signature and pass actual values here.
+        // T = 20°C (neutral for Arrhenius: theta^(20-20) = 1)
+        // SWrad = 0 W/m2 (no light-dependent processes active by default)
+        OpenWQ_hostModelconfig_ref->set_dependVar_at(0, x, 0, 0, 20.0);   // T [°C] default
+        OpenWQ_hostModelconfig_ref->set_dependVar_at(1, x, 0, 0, 0.0);    // SWrad_Wm2 [W/m2] default
     }
 
 

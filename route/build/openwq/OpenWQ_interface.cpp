@@ -31,12 +31,12 @@ int openwq_run_time_start(
       int nRch_2openwq,
       double REACH_VOL_0[]
 ) {
-    
+
     return openWQ->openwq_run_time_start(
           simtime_mizuroute,
           nRch_2openwq,
           REACH_VOL_0
-    );   
+    );
 }
 
 int openwq_run_space(
