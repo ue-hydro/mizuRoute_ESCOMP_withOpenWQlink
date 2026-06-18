@@ -350,7 +350,14 @@ subroutine openwq_run_space_step(segIndex,      & ! index
 
       ! ix_r_openwq          = reachID(NETOPO_in(segIndex)%DREACHI)
       !ix_r_openwq          = segIndex + 1
-      if(ix_r_openwq.eq.-1) return
+      ! Outlet reach: its downstream reach is outside the domain, so the
+      ! recipient lookup above fails (ix_r_openwq stays -1).  Its outflow
+      ! (Qlocal_out) still carries dissolved mass OUT of the domain, so route it
+      ! to the out-of-domain sink (recipient compartment = -1; ix_r/iy_r/iz_r are
+      ! ignored by the core's out-flux branch).  Skipping it (the old `return`)
+      ! left mass accumulating in the most-downstream reach, making its
+      ! concentration rise monotonically.
+      if (ix_r_openwq .eq. -1) index_r_openwq = -1
       ! flux
       flux_m3_timestep = Qlocal_out
       wflux_s2r_openwq = flux_m3_timestep
@@ -467,7 +474,13 @@ subroutine openwq_handle_run_space_step
             index_r_openwq       = river_network_reaches
             ix_r_openwq          = buff%ix_r
             !ix_r_openwq          = segIndex + 1
-            if(ix_r_openwq.eq.-1) return
+            ! Outlet reach forwarded from a tributary rank: route its outflow to
+            ! the out-of-domain sink (recipient compartment = -1) instead of
+            ! dropping it.  NOTE the old `return` here was inside this MPI
+            ! receive do-loop, so it aborted the WHOLE loop and silently
+            ! discarded every remaining buffered flux for this step on the
+            ! master rank.
+            if (ix_r_openwq .eq. -1) index_r_openwq = -1
             ! flux
             wflux_s2r_openwq = buff%wflux_s2r
             ! *Call openwq_run_space* if wflux_s2r_openwq not 0
