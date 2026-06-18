@@ -286,6 +286,9 @@ MODULE globalData
   type(commLink),     allocatable, public :: commRch(:)             ! reach-reach connections for reach flux transfer
 
 ! openwq variable
-  type(CLASSWQ_openwq),save,public            :: openwq_obj
+  ! Note: the module-level `save` statement above already applies SAVE to every
+  ! module variable, so an explicit `,save` here is redundant and triggers
+  ! gfortran's "Duplicate SAVE attribute" legacy-extension warning.
+  type(CLASSWQ_openwq),public                 :: openwq_obj
 
 END MODULE globalData
