@@ -269,11 +269,18 @@ USE mizuroute_openwq,   only:openwq_run_space_step
  rflux%QFUTURE_IRF(nTDH) = 0._dp
 
  ! openwq_space
+ ! The reach water volume openWQ mixes into = storage + total inflow over the
+ ! step.  The flow-in MUST include the lateral inflow (Qlat) and be a VOLUME
+ ! (*dt).  Previously only q_upstream [m3/s] was passed: (i) headwater reaches
+ ! have q_upstream=0, so they were handed zero water volume -> openWQ reported
+ ! the no-water flag (-9999) for every headwater; (ii) the missing *dt left the
+ ! inflow term in m3/s while the outflow was in m3, inflating the advected
+ ! fraction (Qout/Vol) so it clamped to 1 (no residence-time retention).
  call openwq_run_space_step(segIndex, & ! index_openwq
  netopo_in, &
-  rflux%ROUTE(idxIRF)%REACH_VOL(0), & ! Volume (source)
-  q_upstream, & ! flow in
-  rflux%ROUTE(idxIRF)%REACH_Q*dt) ! flow out
+  rflux%ROUTE(idxIRF)%REACH_VOL(0), & ! Volume (source) [m3]
+  (q_upstream + Qlat)*dt, & ! flow in [m3]: upstream + lateral over dt
+  rflux%ROUTE(idxIRF)%REACH_Q*dt) ! flow out [m3]
  else ! length < min_length_route: length is short enough to just pass upstream to downstream
    rflux%QFUTURE_IRF(:) = 0._dp
    rflux%QFUTURE_IRF(1) = q_upstream
