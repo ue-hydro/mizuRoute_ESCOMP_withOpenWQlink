@@ -26,8 +26,9 @@ CLASSWQ_openwq::~CLASSWQ_openwq() {}
 
 int CLASSWQ_openwq::decl(
     int nRch,
-    long long reachID[]
-    ){           
+    long long reachID[],
+    double basArea[]
+    ){
     
 
     OpenWQ_hostModelconfig_ref = new OpenWQ_hostModelconfig();
@@ -71,6 +72,14 @@ int CLASSWQ_openwq::decl(
         // so that BGC templates can use expressions like 1.08^(T - 20) directly
         OpenWQ_hostModelconfig_ref->add_HydroDepend(0, "T",          nRch, 1, 1);  // Water temperature [°C]
         OpenWQ_hostModelconfig_ref->add_HydroDepend(1, "SWrad_Wm2",  nRch, 1, 1);  // Incoming shortwave radiation [W/m2]
+        OpenWQ_hostModelconfig_ref->add_HydroDepend(2, "cellArea_m2", nRch, 1, 1); // Reach local catchment area [m2] (for HBVSED sediment)
+
+        // Flux-concentration exports (host-registered; openWQ prints these when
+        // the master-file OUTPUT block selects them via FLUXES_CONC_TO_PRINT).
+        // REACH_OUTFLOW = reach -> downstream inter-compartment flux.
+        OpenWQ_hostModelconfig_ref->add_FluxConcExport(
+            reachOutflow_fluxexp_openwq, "Qlocal_out",
+            rivernetwork_nRch_openwq, nRch, 1, 1);
 
         // Mapping mizuroute element ids to OpenWQ elements
         // cellid_to_wq for mizuroute-to-openwq output mapping
@@ -106,6 +115,14 @@ int CLASSWQ_openwq::decl(
             OpenWQ_hostModelconfig_ref->set_cellid_to_wq_at(rivernetwork_nRch_openwq,x,0,0,std::to_string(static_cast<long long>(reachID[x])));
         }
 
+        // Publish the reach local catchment area [m2] (constant in time) so the
+        // HBVSED sediment module can convert water volume -> precip depth and
+        // areal density -> absolute mass. Set once here: InitialConfig() above
+        // has already allocated the dependency-variable cubes.
+        for (int x = 0; x < nRch; x++) {
+            OpenWQ_hostModelconfig_ref->set_dependVar_at(2, x, 0, 0, basArea[x]);
+        }
+
         // Step 3: Parse SS and EWF data (cell_ids now available for lookup)
         OpenWQ_couplercalls_ref->ParseEWFandSS(
             *OpenWQ_json_ref,
@@ -118,6 +135,17 @@ int CLASSWQ_openwq::decl(
             *OpenWQ_extwatflux_ss_ref);
             
     }
+    return 0;
+}
+
+// Fill the through-volume of a flux-concentration export (coupler-called).
+// iflux: 0-based export index; ix,iy,iz: Fortran 1-based cell indices.
+int CLASSWQ_openwq::openwq_set_fluxvol(
+    int iflux, int ix, int iy, int iz, double flux_vol_m3) {
+
+    OpenWQ_hostModelconfig_ref->set_fluxVol_hydromodel_at(
+        iflux, ix - 1, iy - 1, iz - 1, flux_vol_m3);
+
     return 0;
 }
 

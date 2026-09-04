@@ -16,6 +16,7 @@ module openwq
     procedure :: openwq_run_time_start => openwq_run_time_start
     procedure :: openwq_run_space => openwq_run_space
     procedure :: openwq_run_space_in => openwq_run_space_in
+    procedure :: openwq_set_fluxvol => openwq_set_fluxvol
     procedure :: openwq_run_time_end => openwq_run_time_end
 
  end type
@@ -32,17 +33,19 @@ module openwq
 
     ! supposed to be decl but needed to openWQ_decl in the interface file
     ! returns integer of either a failure(-1) or success(0)
-    integer function openWQ_init(this, nRch, reachID)
-      
+    integer function openWQ_init(this, nRch, reachID, basArea)
+
       implicit none
       class(CLASSWQ_openwq) :: this
       integer(i4b), intent(in) :: nRch
       integer(c_long_long), intent(in) :: reachID(nRch)
-      
+      real(c_double), intent(in) :: basArea(nRch)
+
       openWQ_init = openwq_decl_c(  &
          this%ptr,                  &
          nRch,                      &
-         reachID)
+         reachID,                   &
+         basArea)
 
    end function openWQ_init
 
@@ -119,6 +122,23 @@ module openwq
          source_EWF_name,                          &
          recipient,ix_r,iy_r,iz_r,                 &
          wflux_s2r)
+
+   end function
+
+
+   integer function openwq_set_fluxvol( &
+      this, iflux, ix, iy, iz, flux_vol_m3)
+
+      implicit none
+      class(CLASSWQ_openwq)      :: this
+      integer(i4b), intent(in)   :: iflux        ! 0-based flux-export index
+      integer(i4b), intent(in)   :: ix           ! 1-based cell indices
+      integer(i4b), intent(in)   :: iy
+      integer(i4b), intent(in)   :: iz
+      real(dp),  intent(in)      :: flux_vol_m3  ! flux through-volume [m3]
+
+      openwq_set_fluxvol = openwq_set_fluxvol_c( &
+         this%ptr, iflux, ix, iy, iz, flux_vol_m3)
 
    end function
 

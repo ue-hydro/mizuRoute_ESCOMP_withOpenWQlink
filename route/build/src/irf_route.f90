@@ -280,7 +280,8 @@ USE mizuroute_openwq,   only:openwq_run_space_step
  netopo_in, &
   rflux%ROUTE(idxIRF)%REACH_VOL(0), & ! Volume (source) [m3]
   (q_upstream + Qlat)*dt, & ! flow in [m3]: upstream + lateral over dt
-  rflux%ROUTE(idxIRF)%REACH_Q*dt) ! flow out [m3]
+  rflux%ROUTE(idxIRF)%REACH_Q*dt, & ! flow out [m3]
+  Qlat*dt) ! local catchment runoff volume [m3] -> feeds the SUMMA_RUNOFF EWF so openWQ injects the runoff solute (conc from the SUMMA-runoff HDF5 EWF)
  else ! length < min_length_route: length is short enough to just pass upstream to downstream
    rflux%QFUTURE_IRF(:) = 0._dp
    rflux%QFUTURE_IRF(1) = q_upstream

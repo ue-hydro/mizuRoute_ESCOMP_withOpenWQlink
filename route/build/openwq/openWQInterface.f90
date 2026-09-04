@@ -8,7 +8,7 @@ interface
     end function
 
     function openwq_decl_c(openWQ,      &
-        nRch, reachID) bind(C, name="openwq_decl")
+        nRch, reachID, basArea) bind(C, name="openwq_decl")
 
         use iso_c_binding
         implicit none
@@ -16,6 +16,7 @@ interface
         type(c_ptr), intent(in), value :: openWQ
         integer(c_int), intent(in), value  :: nRch
         integer(c_long_long), intent(in) :: reachID(nRch)
+        real(c_double), intent(in) :: basArea(nRch)
 
     end function
 
@@ -79,6 +80,21 @@ interface
         integer(c_int), intent(in), value      :: iz_r
         real(c_double), intent(in), value      :: wflux_s2r
         character(c_char), intent(in)          :: source_EWF_name
+
+    end function
+
+    function openwq_set_fluxvol_c( &
+        openWQ, iflux, ix, iy, iz, flux_vol_m3) bind(C, name="openwq_set_fluxvol")
+
+        USE iso_c_binding
+        implicit none
+        integer(c_int)                         :: openwq_set_fluxvol_c
+        type(c_ptr), intent(in), value         :: openWQ
+        integer(c_int), intent(in), value      :: iflux
+        integer(c_int), intent(in), value      :: ix
+        integer(c_int), intent(in), value      :: iy
+        integer(c_int), intent(in), value      :: iz
+        real(c_double), intent(in), value      :: flux_vol_m3
 
     end function
 

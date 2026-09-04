@@ -23,7 +23,8 @@ extern "C" {
     int openwq_decl(
         CLASSWQ_openwq *openWQ,
         int nRch,
-        long long reachID[]);           // num of layers in y-dir (set to 1 because not used in summa)
+        long long reachID[],
+        double basArea[]);           // num of layers in y-dir (set to 1 because not used in summa)
 
     int openwq_run_time_start(
         CLASSWQ_openwq *openWQ,
@@ -39,8 +40,13 @@ extern "C" {
         int recipient, int ix_r, int iy_r, int iz_r, 
         double wflux_s2r, double wmass_source);
 
+    int openwq_set_fluxvol(
+        CLASSWQ_openwq *openWQ,
+        int iflux, int ix, int iy, int iz,
+        double flux_vol_m3);
+
     int openwq_run_space_in(
-        CLASSWQ_openwq *openWQ, 
+        CLASSWQ_openwq *openWQ,
         int simtime_summa[],
         char* source_EWF_name,
         int recipient, int ix_r, int iy_r, int iz_r, 

@@ -91,6 +91,7 @@ MODULE globalData
   integer(i4b),                    public :: nHRU_trib            ! number of HRUs in tributaries
   integer(i4b),     allocatable,   public :: basinID(:)           ! HRU id in the whole river network
   integer(i4b),     allocatable,   public :: reachID(:)           ! reach id in the whole river network
+  real(dp),         allocatable,   public :: reach_basArea(:)     ! reach local contributing-HRU catchment area [m2], whole network (for openWQ HBVSED sediment)
 
   ! ---------- routing methods  -------------------------------------------------------------------------
   type(routeContainer), allocatable , public :: rch_routes(:)           ! a collection of routing method objects

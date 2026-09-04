@@ -45,6 +45,9 @@
 // Global Indexes for EWF
   inline int summaEWF_runoff_openwq = 0;
 
+// Global Indexes for Flux-Concentration Exports
+  inline int reachOutflow_fluxexp_openwq = 0;   // reach -> downstream inter-compartment flux
+
 class CLASSWQ_openwq
 {
 
@@ -85,8 +88,13 @@ class CLASSWQ_openwq
 
     int decl(
         int nRch,
-        long long reachID[]
+        long long reachID[],
+        double basArea[]
         );           // num of layers in y-dir (set to 1 because not used in summa)
+
+    // Fill the through-volume of a flux-concentration export (coupler-called)
+    int openwq_set_fluxvol(
+        int iflux, int ix, int iy, int iz, double flux_vol_m3);
 
     int openwq_run_time_start(
         int simtime_mizuroute[],

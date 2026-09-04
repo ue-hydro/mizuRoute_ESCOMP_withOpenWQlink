@@ -352,7 +352,8 @@ CONTAINS
    netopo_in, &
       rflux%ROUTE(idxDW)%REACH_VOL(0),    & ! Volume (source)
       Qlocal(1,1)*dT,                     & ! flow in
-      rflux%ROUTE(idxDW)%REACH_Q*dT)      ! flow out
+      rflux%ROUTE(idxDW)%REACH_Q*dT,      & ! flow out
+      rflux%BASIN_QR(1)*dT)                 ! local catchment runoff volume [m3] (drives HBVSED erosion)
 
 
  else ! if head-water and pour runnof to the bottom of reach

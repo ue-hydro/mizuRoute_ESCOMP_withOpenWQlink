@@ -36,6 +36,8 @@ subroutine openwq_init(err, message)
       USE globalData, ONLY: nRch             ! number of reaches in the whoel river network
       USE globalData,       ONLY : pid
       use globalData, only: reachID
+      USE globalData, ONLY: reach_basArea    ! reach local catchment area [m2], whole network (for HBVSED sediment)
+      use iso_c_binding, only: c_double
       use mpi
 
       implicit none
@@ -51,15 +53,28 @@ subroutine openwq_init(err, message)
       integer :: oldtypes(4), lengths(4)
       integer(kind=MPI_ADDRESS_KIND) :: extent
       integer :: openwq_run_space_type_mpi0
+      real(c_double), allocatable :: basArea(:)   ! reach local catchment area [m2] (for HBVSED sediment)
 
       if (pid == 0) then
             ! initalize openWQ object
-            openwq_obj = CLASSWQ_openwq() 
+            openwq_obj = CLASSWQ_openwq()
+
+            ! Reach local catchment area [m2] (constant in time). Published to
+            ! OpenWQ as the "cellArea_m2" dependency variable so the HBVSED
+            ! sediment module can convert water volume -> precip depth and areal
+            ! density -> absolute mass.
+            allocate(basArea(nRch))
+            do i = 1, nRch
+                  basArea(i) = reach_basArea(i)
+            end do
 
             ! Call openwq_init
             err=openwq_obj%decl(    &
                   nRch,             &
-                  int(reachId, kind=8))
+                  int(reachId, kind=8), &
+                  basArea)
+
+            deallocate(basArea)
       end if
 
       
@@ -255,7 +270,8 @@ subroutine openwq_run_space_step(segIndex,      & ! index
       NETOPO_in, &
       REACH_VOL_segIndex,                       & ! Volume
       Qlocal_in,                                & ! flow in
-      Qlocal_out)                                 ! flow out
+      Qlocal_out,                               & ! flow out
+      Qlateral_openwq_in)                         ! optional: local catchment runoff volume [m3] (drives HBVSED erosion)
 
       USE globalData,       ONLY : openwq_obj
       USE globalData,       ONLY : simDatetime       
@@ -282,6 +298,7 @@ subroutine openwq_run_space_step(segIndex,      & ! index
       real(dp)           :: REACH_VOL_segIndex        ! Volume
       real(dp)           :: Qlocal_in                 ! flow in
       real(dp)           :: Qlocal_out                ! flow out
+      real(dp), optional :: Qlateral_openwq_in        ! local catchment runoff volume [m3] (drives HBVSED erosion)
       integer(i4b)       :: river_network_reaches = 0
       integer(i4b)       :: index_s_openwq
       integer(i4b)       :: index_r_openwq
@@ -336,6 +353,21 @@ subroutine openwq_run_space_step(segIndex,      & ! index
             end if
       end do
       ! ix_s_openwq          = reachID(segIndex)
+
+      ! ====================================================
+      ! 0 Local catchment runoff INTO this reach (external water flux).
+      !   This is what drives HBVSED rain-splash/erosion: the sediment module
+      !   mobilizes eroded sediment from the incoming local runoff. The mobilized
+      !   sediment is then routed downstream by the transport call (section 1
+      !   below) and flushed out of the domain at the outlet.
+      ! ====================================================
+      if (present(Qlateral_openwq_in) .and. pid .eq. 0) then
+            err=openwq_obj%openwq_run_space_in(                              &
+                  simtime, 'SUMMA_RUNOFF',                                  &
+                  river_network_reaches, ix_s_openwq, iy_s_openwq, iz_s_openwq, &
+                  Qlateral_openwq_in)
+      end if
+
       compt_vol_m3         = REACH_VOL_segIndex + Qlocal_in ! That's what is received previous iteraction
       wmass_source_openwq  = compt_vol_m3
       ! *Recipient*: 
@@ -375,6 +407,10 @@ subroutine openwq_run_space_step(segIndex,      & ! index
       index_r_openwq, ix_r_openwq, iy_r_openwq, iz_r_openwq,    &
       wflux_s2r_openwq,                                         &
       wmass_source_openwq)
+
+      ! REACH_OUTFLOW flux-conc export (index 0): report the reach-outflow
+      ! through-volume so openWQ can print its conc/mass (FLUXES_CONC_TO_PRINT).
+      err=openwq_obj%openwq_set_fluxvol(0, ix_s_openwq, 1, 1, wflux_s2r_openwq)
 
       else
             data_to_send(ix_s_openwq)%ix_r = ix_r_openwq
@@ -491,6 +527,9 @@ subroutine openwq_handle_run_space_step
             index_r_openwq, ix_r_openwq, iy_r_openwq, iz_r_openwq,    &
             wflux_s2r_openwq,                                         &
             wmass_source_openwq)
+
+            ! REACH_OUTFLOW flux-conc export (index 0) for this gathered reach.
+            err=openwq_obj%openwq_set_fluxvol(0, ix_s_openwq, 1, 1, wflux_s2r_openwq)
 
             call MPI_Iprobe(MPI_ANY_SOURCE,openwq_tag, mpicom_route,  flag, status, ierr)
 

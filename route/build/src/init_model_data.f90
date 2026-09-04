@@ -190,6 +190,8 @@ CONTAINS
   USE globalData,  ONLY: nContribHRU            ! number of HRUs that are connected to any reaches
   USE globalData,  ONLY: basinID                ! HRU id vector
   USE globalData,  ONLY: reachID                ! reach ID vector
+  USE globalData,  ONLY: reach_basArea          ! reach catchment area [m2] vector (for openWQ HBVSED sediment)
+  USE var_lookup,  ONLY: ixSEG                  ! index of variables for the stream segments (for basArea)
   USE globalData,  ONLY: runMode                ! mizuRoute run mode - standalone or ctsm-coupling
   ! external subroutines
   USE read_streamSeg,       ONLY: mod_meta_varFile         ! modify variable I/O options
@@ -250,7 +252,7 @@ CONTAINS
 
    if (masterproc) then
      ! populate basiID and reachID vectors for output (in only master processor)
-     allocate(basinID(nHRU), reachID(nRch), stat=ierr)
+     allocate(basinID(nHRU), reachID(nRch), reach_basArea(nRch), stat=ierr)
      if(ierr/=0)then; message=trim(message)//'problem allocating [basinID, reachID]'; return; endif
 
      do iHRU = 1,nHRU
@@ -258,6 +260,8 @@ CONTAINS
      enddo
      do iRch = 1,nRch
       reachID(iRch) = structNTOPO(iRch)%var(ixNTOPO%segId)%dat(1)
+      ! reach local catchment area [m2] (contributing HRUs) for openWQ HBVSED sediment
+      reach_basArea(iRch) = structSEG(iRch)%var(ixSEG%basArea)%dat(1)
      enddo
    end if  ! if processor=0 (root)
 

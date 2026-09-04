@@ -18,10 +18,11 @@ void delete_openwq(CLASSWQ_openwq* openWQ) {
 int openwq_decl(
     CLASSWQ_openwq *openWQ,
     int nRch,
-    long long reachID[]
-    ){            
+    long long reachID[],
+    double basArea[]
+    ){
 
-    return openWQ->decl(nRch, reachID);
+    return openWQ->decl(nRch, reachID, basArea);
 
 }
 
@@ -53,8 +54,16 @@ int openwq_run_space(
         wflux_s2r, wmass_source);
 }
 
+int openwq_set_fluxvol(
+    CLASSWQ_openwq *openWQ,
+    int iflux, int ix, int iy, int iz,
+    double flux_vol_m3) {
+
+    return openWQ->openwq_set_fluxvol(iflux, ix, iy, iz, flux_vol_m3);
+}
+
 int openwq_run_space_in(
-    CLASSWQ_openwq *openWQ, 
+    CLASSWQ_openwq *openWQ,
     int simtime_summa[],
     char* source_EWF_name,
     int recipient, int ix_r, int iy_r, int iz_r, 
