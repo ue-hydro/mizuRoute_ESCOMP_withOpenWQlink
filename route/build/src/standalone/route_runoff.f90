@@ -39,6 +39,7 @@ USE mizuroute_openwq,   ONLY : openwq_init
 USE mizuroute_openwq,   ONLY : openwq_run_time_start
 USE mizuroute_openwq,   ONLY : openwq_run_time_end
 USE mizuroute_openwq, ONLY : openwq_handle_run_space_step
+USE mizuroute_openwq, ONLY : openwq_run_space_step_basin_in_mpi
 USE mpi_utils,          ONLY : shr_mpi_barrier
 USE, intrinsic :: iso_c_binding
 
@@ -110,6 +111,9 @@ do while (.not.finished)
   call mpi_route(pid, nNodes, mpicom_route, ierr, cmessage)
   if(ierr/=0) call handle_err(ierr, cmessage)
   call t_stopf ('route-total')
+
+  ! *** OPENWQ: runoff-solute injection (EWF), after routing so BASIN_QR holds this step's runoff
+  call openwq_run_space_step_basin_in_mpi(openwq_obj)
 
   call t_startf ('output')
   call output(ierr, cmessage)

@@ -10,6 +10,7 @@ module mizuroute_openwq
   public :: openwq_run_time_start
   !public :: openwq_run_time_start_go
   public :: openwq_run_space_step_basin_in
+  public :: openwq_run_space_step_basin_in_mpi   ! runoff-solute injection (EWF SUMMA_RUNOFF), MPI-aware
   public :: openwq_run_space_step
   public :: openwq_run_time_end
   public :: openwq_handle_run_space_step
@@ -175,6 +176,66 @@ subroutine openwq_run_time_start(openwq_obj)
   
 end subroutine openwq_run_time_start
 
+
+!  Runoff-solute injection (EWF 'SUMMA_RUNOFF') into each reach, once per time step.
+!  Restores the call made in the original coupling (main_route.f90: openwq_run_space_step_basin_in),
+!  which was lost when the coupler moved to the MPI-decomposed mizuRoute.
+!  BASIN_QR is gathered across ranks in the same order as the reach volumes in
+!  openwq_run_time_start, so the gathered index is OpenWQ's ix.
+subroutine openwq_run_space_step_basin_in_mpi(openwq_obj)
+      USE globalData,       ONLY : simDatetime, nRch, RCHFLX, RCHFLX_trib, rch_per_proc, pid, &
+                                   nrch_mainstem, masterproc, nTribOutlet, TSEC
+      use mpi_utils
+      implicit none
+      class(CLASSWQ_openwq), intent(in)   :: openwq_obj
+      integer(i4b)                        :: iRch, iProc, err
+      integer(i4b)                        :: simtime(6)
+      real(dp),allocatable                :: QR_local(:)
+      real(dp),allocatable                :: QR_all(:)
+      real(dp)                            :: dt
+      character(strLen)                   :: message
+      integer(i4b) :: ndata_per_proc(0:size(rch_per_proc)-2)
+      message = "openwq_run_space_step_basin_in_mpi/"
+      do iProc = 0, size(ndata_per_proc)-1
+            ndata_per_proc(iProc) = rch_per_proc(iProc)
+      end do
+      ndata_per_proc(0) = ndata_per_proc(0) + rch_per_proc(-1)
+      allocate(QR_local(ndata_per_proc(pid)))
+      if (allocated(RCHFLX_trib)) then
+            if (masterproc) then
+                  do iRch = 1, nRch_mainstem
+                        QR_local(iRch) = RCHFLX_trib(iRch)%BASIN_QR(1)
+                  end do
+                  do iRch = 1,rch_per_proc(0)
+                        QR_local(iRch + nRch_mainstem) = RCHFLX_trib(iRch + nRch_mainstem + nTribOutlet)%BASIN_QR(1)
+                  end do
+            else
+                  do iRch = 1, size(RCHFLX_trib)
+                        QR_local(iRch) = RCHFLX_trib(iRch)%BASIN_QR(1)
+                  end do
+            end if
+      else
+            do iRch = 1, nRch
+                  QR_local(iRch) = RCHFLX(iRch)%BASIN_QR(1)
+            end do
+      end if
+      call shr_mpi_gatherV(QR_local, ndata_per_proc, QR_all, err, message)
+      if (masterproc) then
+            simtime(1) = simDatetime(1)%year()
+            simtime(2) = simDatetime(1)%month()
+            simtime(3) = simDatetime(1)%day()
+            simtime(4) = simDatetime(1)%hour()
+            simtime(5) = simDatetime(1)%minute()
+            simtime(6) = simDatetime(1)%sec()
+            dt = TSEC(2) - TSEC(1)
+            do iRch = 1, nRch
+                  if (QR_all(iRch) > 0._dp) then
+                        err = openwq_obj%openwq_run_space_in(simtime, 'SUMMA_RUNOFF', 0, iRch, 1, 1, QR_all(iRch)*dt)
+                  end if
+            end do
+      end if
+end subroutine openwq_run_space_step_basin_in_mpi
+
 !  OpenWQ space basin/summa
 subroutine openwq_run_space_step_basin_in()
 
@@ -336,7 +397,7 @@ subroutine openwq_run_space_step(segIndex,      & ! index
             end if
       end do
       ! ix_s_openwq          = reachID(segIndex)
-      compt_vol_m3         = REACH_VOL_segIndex + Qlocal_in ! That's what is received previous iteraction
+      compt_vol_m3         = max(REACH_VOL_segIndex + Qlocal_in, Qlocal_out) ! water available in the reach during the step cannot be less than the outflow (DW headwater reaches report vol=0, Qin=0)
       wmass_source_openwq  = compt_vol_m3
       ! *Recipient*: 
       index_r_openwq       = river_network_reaches
