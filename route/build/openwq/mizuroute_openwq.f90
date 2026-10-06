@@ -19,9 +19,13 @@ module mizuroute_openwq
 
   integer,save,public :: openwq_run_space_type_mpi
 
+  ! Reach fluxes sent to the master rank (the only rank that holds the OpenWQ
+  ! object): the outflow of the reach, the water volume it is taken from, and
+  ! the local catchment runoff volume that enters the reach in the step
+  ! (wflux_ewf, the SUMMA_RUNOFF external water flux that brings the solute).
   type openwq_run_space_step_type
       integer(i4b) :: ix_s, ix_r
-      real(dp) :: wflux_s2r, wmass_source
+      real(dp) :: wflux_s2r, wmass_source, wflux_ewf
   end type openwq_run_space_step_type
 
   type(openwq_run_space_step_type), save, public,allocatable :: data_to_send(:)
@@ -47,10 +51,10 @@ subroutine openwq_init(err, message)
       character(*),intent(inout)    :: message 
 
       type(openwq_run_space_step_type) :: dummy(2)
-      integer(kind=MPI_ADDRESS_KIND) :: offsets(4)
+      integer(kind=MPI_ADDRESS_KIND) :: offsets(5)
       integer :: ierr
       integer :: i
-      integer :: oldtypes(4), lengths(4)
+      integer :: oldtypes(5), lengths(5)
       integer(kind=MPI_ADDRESS_KIND) :: extent
       integer :: openwq_run_space_type_mpi0
       real(c_double), allocatable :: basArea(:)   ! reach local catchment area [m2] (for HBVSED sediment)
@@ -82,7 +86,8 @@ subroutine openwq_init(err, message)
       call MPI_GET_ADDRESS(dummy(1)%ix_r,  offsets(2), ierr)
       call MPI_GET_ADDRESS(dummy(1)%wflux_s2r,  offsets(3), ierr)
       call MPI_GET_ADDRESS(dummy(1)%wmass_source,  offsets(4), ierr)
-      do i=2,4
+      call MPI_GET_ADDRESS(dummy(1)%wflux_ewf,  offsets(5), ierr)
+      do i=2,5
             offsets(i) = offsets(i) - offsets(1)
       end do
       offsets(1) = 0
@@ -98,8 +103,11 @@ subroutine openwq_init(err, message)
       ! dummy%wmass_source
       oldtypes(4) = MPI_DOUBLE_PRECISION
       lengths(4) = 1
+      ! dummy%wflux_ewf
+      oldtypes(5) = MPI_DOUBLE_PRECISION
+      lengths(5) = 1
 
-      call MPI_TYPE_CREATE_STRUCT(4, lengths, offsets, oldtypes, openwq_run_space_type_mpi0, ierr)
+      call MPI_TYPE_CREATE_STRUCT(5, lengths, offsets, oldtypes, openwq_run_space_type_mpi0, ierr)
       ! Reuse the offsets array
       call MPI_GET_ADDRESS(dummy(1)%ix_s, offsets(1), ierr)
       call MPI_GET_ADDRESS(dummy(2)%ix_s, offsets(2), ierr)
@@ -368,7 +376,7 @@ subroutine openwq_run_space_step(segIndex,      & ! index
                   Qlateral_openwq_in)
       end if
 
-      compt_vol_m3         = REACH_VOL_segIndex + Qlocal_in ! That's what is received previous iteraction
+      compt_vol_m3         = max(REACH_VOL_segIndex + Qlocal_in, Qlocal_out) ! water available in the reach during the step cannot be less than the outflow (DW headwater reaches report vol=0, Qin=0)
       wmass_source_openwq  = compt_vol_m3
       ! *Recipient*: 
       index_r_openwq       = river_network_reaches
@@ -417,6 +425,15 @@ subroutine openwq_run_space_step(segIndex,      & ! index
             data_to_send(ix_s_openwq)%ix_s = ix_s_openwq
             data_to_send(ix_s_openwq)%wflux_s2r = wflux_s2r_openwq
             data_to_send(ix_s_openwq)%wmass_source = wmass_source_openwq
+            ! The local catchment runoff of this reach (section 0 above) can
+            ! only be applied by the master rank. Without forwarding it, the
+            ! reaches of the other ranks received their lateral water with no
+            ! solute and diluted everything downstream.
+            if (present(Qlateral_openwq_in)) then
+                  data_to_send(ix_s_openwq)%wflux_ewf = Qlateral_openwq_in
+            else
+                  data_to_send(ix_s_openwq)%wflux_ewf = 0._dp
+            end if
             call MPI_Isend(data_to_send(ix_s_openwq), 1, openwq_run_space_type_mpi, 0, openwq_tag, mpicom_route, request, ierr)
 
       end if
@@ -520,6 +537,15 @@ subroutine openwq_handle_run_space_step
             ! flux
             wflux_s2r_openwq = buff%wflux_s2r
             ! *Call openwq_run_space* if wflux_s2r_openwq not 0
+
+            ! Local catchment runoff into this reach (external water flux),
+            ! as done for the reaches of the master rank in openwq_run_space_step.
+            if (buff%wflux_ewf > 0._dp) then
+                  err=openwq_obj%openwq_run_space_in(                              &
+                        simtime, 'SUMMA_RUNOFF',                                  &
+                        river_network_reaches, ix_s_openwq, iy_s_openwq, iz_s_openwq, &
+                        buff%wflux_ewf)
+            end if
 
             err=openwq_obj%openwq_run_space(                          &
             simtime,                                                  &
